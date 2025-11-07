@@ -1,0 +1,46 @@
+name: nightly-drift
+on:
+  schedule:
+    - cron: '0 2 * * *' # daily at 02:00 UTC (adjust)
+  workflow_dispatch:
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Download prod sample
+        # implement your download: S3, artifact, DB query; placeholder:
+        run: |
+          echo "Download prod sample from your storage to data/prod_sample.csv"
+
+      - name: Run drift check
+        id: drift
+        run: |
+          python src/drift_check.py
+          # parse resulting report or exit code. Here we fake detection:
+          # For production, parse the json/html to decide.
+          # We'll assume drift found and set output:
+          echo "::set-output name=drift_detected::true"
+
+      - name: Trigger retrain if drift
+        if: steps.drift.outputs.drift_detected == 'true'
+        env:
+          REPO: ${{ github.repository }}
+          TOKEN: ${{ secrets.PAT_FOR_DISPATCH }}
+        run: |
+          curl -X POST \
+           -H "Accept: application/vnd.github+json" \
+           -H "Authorization: token $TOKEN" \
+           https://api.github.com/repos/$REPO/dispatches \
+           -d '{"event_type":"drift_detected"}'
