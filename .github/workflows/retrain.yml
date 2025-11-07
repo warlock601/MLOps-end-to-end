@@ -1,0 +1,44 @@
+name: retrain
+on:
+  repository_dispatch:
+    types: [drift_detected]
+  workflow_dispatch: # allow manual triggers
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Download data
+        run: |
+          echo "Download latest data from Kaggle / S3 / DB"
+          # Example: kaggle datasets download ... and unzip to data/
+
+      - name: Train and log to MLflow
+        env:
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+        run: |
+          python src/train.py
+
+      - name: Build and push Docker image (optional)
+        uses: docker/build-push-action@v5
+        with:
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/titanic-model:latest
+          # configure registry auth with secrets
+
+      - name: Deploy to k8s (optional)
+        if: ${{ secrets.KUBE_CONFIG != '' }}
+        env:
+          KUBECONFIG: ${{ secrets.KUBE_CONFIG }}
+        run: |
+          kubectl --kubeconfig=$KUBECONFIG apply -f k8s/
